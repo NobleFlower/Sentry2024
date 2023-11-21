@@ -1,0 +1,6 @@
+[submodule "Nav/src/dll"]
+	path = Nav/src/dll
+	url = git@github.com:robotics-upo/dll.git
+[submodule "Nav/src/LiDAR_IMU_Init"]
+	path = Nav/src/LiDAR_IMU_Init
+	url = git@github.com:hku-mars/LiDAR_IMU_Init.git
