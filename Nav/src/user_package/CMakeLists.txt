@@ -15,19 +15,19 @@ SET(CMAKE_BUILD_TYPE "RelWithDebInfo")
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 # #Qt
-# find_package(Qt5Core)
-# find_package(Qt5SerialPort)
-# find_package(Qt5Network)
+find_package(Qt5Core)
+find_package(Qt5SerialPort)
+find_package(Qt5Network)
 
 # #spdlog
-# find_package(spdlog)
+find_package(spdlog)
 
 set(loggerFactory_DIR /usr/local/KdrobotCppLibs/lib/cmake/loggerFactory)
-# find_package(loggerFactory)
+find_package(loggerFactory)
 set(Qt_Util_DIR /usr/local/KdrobotCppLibs/lib/cmake/Qt_Util)
-# find_package(Qt_Util)
+find_package(Qt_Util)
 set(VCOMCOMM_DIR /usr/local/KdrobotCppLibs/lib/cmake/VCOMCOMM)
-# find_package(VCOMCOMM)
+find_package(VCOMCOMM)
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   message_generation
@@ -39,13 +39,6 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   tf
   tf_conversions
-  Qt5Core
-  Qt5SerialPort
-  Qt5Network
-  spdlog
-  loggerFactory
-  Qt_Util
-  VCOMCOMM
 )
 
 ## System dependencies are found with CMake's conventions

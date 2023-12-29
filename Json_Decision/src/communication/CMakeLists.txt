@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(robot_decision)
+project(communication)
+
+## Compile as C++11, supported in ROS Kinetic and newer
+# add_compile_options(-std=c++11)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -16,24 +19,28 @@ SET(CMAKE_BUILD_TYPE "RelWithDebInfo")
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
-  message_generation
-  nav_msgs
-  std_msgs
-  roscpp
-  rosbag
-  rospy
-  tf
-  tf_conversions
   global_interface
-  pcl_ros
-  message_filters
+  nav_msgs
+  roscpp
+  rospy
 )
-
-find_package(PCL REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
+# #Qt
+find_package(Qt5Core)
+find_package(Qt5SerialPort)
+find_package(Qt5Network)
 
+# #spdlog
+find_package(spdlog)
+
+set(loggerFactory_DIR /usr/local/KdrobotCppLibs/lib/cmake/loggerFactory)
+find_package(loggerFactory)
+set(Qt_Util_DIR /usr/local/KdrobotCppLibs/lib/cmake/Qt_Util)
+find_package(Qt_Util)
+set(VCOMCOMM_DIR /usr/local/KdrobotCppLibs/lib/cmake/VCOMCOMM)
+find_package(VCOMCOMM)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -88,7 +95,7 @@ find_package(PCL REQUIRED)
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   geometry_msgs#   nav_msgs#   std_msgs
+#   geometry_msgs#   nav_msgs
 # )
 
 ################################################
@@ -122,8 +129,8 @@ find_package(PCL REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES robot_decision
- CATKIN_DEPENDS geometry_msgs nav_msgs roscpp std_msgs tf tf_conversions message_generation global_interface pcl_ros message_filters
+#  LIBRARIES communication
+ CATKIN_DEPENDS geometry_msgs global_interface nav_msgs roscpp rospy
 #  DEPENDS system_lib
 )
 
@@ -140,7 +147,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/robot_decision.cpp
+#   src/${PROJECT_NAME}/communication.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -151,11 +158,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/robot_decision_node.cpp)
-add_executable(robot_decision_node 
-  src/robot_decision_node.cpp
-  src/robot_decision/RobotDecision.cpp
-  src/Json/jsoncpp.cpp)
+add_executable(${PROJECT_NAME}_node src/communication_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -165,12 +168,17 @@ add_executable(robot_decision_node
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(robot_decision_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} global_interface_generate_messages_cpp)
+add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(robot_decision_node
-  ${catkin_LIBRARIES} ${PCL_LIBRARIES}
+# target_link_libraries(${PROJECT_NAME}_node
+#   ${catkin_LIBRARIES}
+# )
+target_link_libraries(${PROJECT_NAME}_node
+  ${catkin_LIBRARIES}
+  KdrobotCppLibs::loggerFactory
+  KdrobotCppLibs::Qt_Util
+  KdrobotCppLibs::VCOMCOMM
 )
 
 #############
@@ -220,7 +228,7 @@ target_link_libraries(robot_decision_node
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_robot_decision.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_communication.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
