@@ -1,11 +1,3 @@
-/*
- * @Author: NobleFlower 1619239422@qq.com
- * @Date: 2023-11-21 20:27:39
- * @LastEditors: NobleFlower 1619239422@qq.com
- * @LastEditTime: 2023-12-15 20:47:19
- * @FilePath: /Sentry2024/Json_Decision/src/robot_decision/include/robot_decision/structs.h
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 #ifndef _RD_STRUCTS_H
 #define _RD_STRUCTS_H
 
@@ -29,6 +21,13 @@
             this->vehicleX = pose->pose.pose.position.x;
             this->vehicleY = pose->pose.pose.position.y;
             this->vehicleZ = pose->pose.pose.position.z;
+        };
+        RobotPosition(int id, float x, float y)
+        {
+            this->robot_id = id;
+            this->vehicleX = x;
+            this->vehicleY = y;
+            // this->vehicleZ = z;
         };
     } RobotPosition;
 
@@ -71,6 +70,7 @@
         int out_post_HP_min;
         int out_post_HP_max;
         int base_HP_min;
+        int bullet_num;
         std::vector<std::vector<int>> enemy_position;
         std::vector<std::vector<int>> friend_position;
         // decision

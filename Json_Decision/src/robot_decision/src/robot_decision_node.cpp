@@ -1,25 +1,8 @@
 #include "../include/robot_decision_node.hpp"
 #include <ros/package.h>
-#include <pcl/point_cloud.h>
-#include <chrono>
-#include <cmath>
-#include <cstddef>
-#include <fstream>
-#include <functional>
-#include <mutex>
-#include <pcl/impl/point_types.hpp>
-#include <shared_mutex>
-#include <string>
-#include <vector>
-#include "Json/json.h"
-#include "boost/bind.hpp"
-#include "geometry_msgs/PointStamped.h"
-#include "global_interface/Decision.h"
-#include "nav_msgs/Odometry.h"
-#include "robot_decision/public.h"
+#include <memory>
 #include "robot_decision/structs.h"
-#include "std_msgs/Float32.h"
-#include "tf2/transform_storage.h"
+#include "ros/time.h"
 
 void RobotDecisionNode::jointStateCallBack(const sensor_msgs::JointState::Ptr &msg) {
     std::unique_lock<std::shared_timed_mutex> ulk(this->myMutex_joint_states);
@@ -33,6 +16,7 @@ void RobotDecisionNode::jointStateCallBack(const sensor_msgs::JointState::Ptr &m
 void RobotDecisionNode::clearGoals() {
     this->acummulated_poses_.clear();
 }
+
 pcl::PointCloud<pcl::PointXYZ>::Ptr waypoints(new pcl::PointCloud<pcl::PointXYZ>());
 float vehicleX = 0, vehicleY = 0, vehicleZ = 0;
 double curTime = 0, waypointTime = 0;
@@ -140,6 +124,13 @@ bool RobotDecisionNode::decodeConfig() {
 }
 
 RobotDecisionNode::RobotDecisionNode() {
+    ROS_INFO("RobotDecision node...");
+    ROS_INFO("starting...");
+    if (!this->decodeConfig())
+    {
+        ROS_ERROR("Failed to get Config!");
+        abort();
+    }
     nhPrivate.getParam("distance_thr", this->_INIT_DISTANCE_THR);
     nhPrivate.getParam("seek_thr", this->_INIT_SEEK_THR);
     nhPrivate.getParam("IsBlue", this->_INIT_IsBlue);
@@ -188,9 +179,12 @@ RobotDecisionNode::RobotDecisionNode() {
     waypointMsgs.header.frame_id = "map";
 
     this->pubSpeed = nh.advertise<std_msgs::Float32>("/speed", 5);
+    // 检查条件是否为真。如果条件为假，程序将终止并输出错误信息
+    assert(CARPOS_NUM == this->type_id.size() / 2);
 }
+RobotDecisionNode::~RobotDecisionNode() {};
 
-bool RobotDecisionNode::process_once(int &HP, int &mode, float &_x, float &_y, int &time, int &now_out_post_HP, int &now_base_HP, std::vector<RobotPosition> &friendPositions, std::vector<RobotPosition> &enemyPositions, geometry_msgs::TransformStamped::Ptr transformStamped) {
+bool RobotDecisionNode::process_once(int &HP, int &mode, float &_x, float &_y, int &time, int &now_out_post_HP, int &now_base_HP, std::vector<RobotPosition> &friendPositions, std::vector<RobotPosition> &enemyPositions, boost::shared_ptr<geometry_msgs::TransformStamped> transformStamped) {
     ROS_INFO("Heartbeat Processing");
     if (_x == 0.0 || _y == 0.0 || std::isnan(_x) || std::isnan(_y)) {
         if (transformStamped != nullptr) {
@@ -208,14 +202,14 @@ bool RobotDecisionNode::process_once(int &HP, int &mode, float &_x, float &_y, i
     return true;
 }
 
-std::vector<RobotPosition> RobotDecisionNode::point2f2Position(std::array<global_interface::Point2f, 12UL> pos) {
+std::vector<RobotPosition> RobotDecisionNode::point2f2Position(boost::array<::global_interface::Point2f, 12UL> pos) {
     if (pos.size() != CARPOS_NUM * 2) {
         ROS_ERROR("Position msg not valid !");
         return {};
     }
     std::vector<RobotPosition> result;
     for (int i = 0; i < int(pos.size()); ++i) {
-        // result.emplace_back(RobotPosition(i, pos[i].x, pos[i].y));
+        result.emplace_back(RobotPosition(i, pos[i].x, pos[i].y));
     }
     return result;
 }
@@ -282,7 +276,79 @@ void RobotDecisionNode::messageCallBack(const boost::shared_ptr<::global_interfa
     for (auto& it: this->_car_ids) {
         _car_hps.emplace_back(carHP_msg_->hp[it + !this->_IsBlue * OBJHP_NUM]);
     }
-    // std::vector<RobotDecisionNode> allPositions = this->point2f2Position(carPos_msg_->pos);
+    // 将所有位置填入vector
+    std::vector<RobotPosition> allPositions = this->point2f2Position(carPos_msg_->pos);
+    try {
+        // transformStamped = std::make_shared<geometry_msgs::TransformStamped>(this->tf_buffer_->lookupTransform("map_decision", "base_link", tf2::TimePointZero));
+        this->_transformStamped = transformStamped;
+        std::shared_lock<std::shared_timed_mutex> slk(this->myMutex_detectionArray);
+        if (this->detectionArray_msg != nullptr && ros::Time::now().toSec() - this->detectionArray_msg->header.stamp.sec <= this->_TIME_THR)
+        {
+            for (auto it : this->detectionArray_msg->detections)
+            {
+                tf2::Transform tf2_transform;
+                tf2::Vector3 p(it.center.position.x, it.center.position.y, it.center.position.z);
+                tf2::convert(transformStamped->transform, tf2_transform);
+                p = tf2_transform * p;
+                // allPositions[this->type_id.find(it.type)->second].x = p.getX();
+                // allPositions[this->type_id.find(it.type)->second].y = p.getY();
+            }
+        }
+        slk.unlock();
+    }
+    catch (tf2::TransformException &ex)
+    {
+        ROS_ERROR("Cannot get transform ! TransformException: %s", ex.what());
+    }
+    std::vector<RobotPosition> friendPositions;
+    std::vector<RobotPosition> enemyPositions;
+    for (int i = 0; i < int(allPositions.size()); ++i)
+    {
+        if (i == currentSelfIndex)
+        {
+            continue;
+        }
+        if (i < CARPOS_NUM)
+        {
+            if (this->_IsBlue)
+                enemyPositions.emplace_back(allPositions[i]);
+            else
+                friendPositions.emplace_back(allPositions[i]);
+        }
+        else
+        {
+            if (this->_IsBlue)
+                friendPositions.emplace_back(allPositions[i]);
+            else
+                enemyPositions.emplace_back(allPositions[i]);
+        }
+    }
+    RobotPosition myPos;
+    myPos.robot_id = this->_IsBlue ? this->type_id.find("B7")->second : this->type_id.find("R7")->second;
+    myPos.vehicleX = myPos_x_;
+    myPos.vehicleY = myPos_y_;
+    std::map<int, float> target_weights = this->myRDS->decideAimTarget(_IsBlue, myPos, enemyPositions, _car_hps, 0.5, 0.5, _if_enemy_outpost_down);
+    ROS_INFO("Publish StrikeLicensing: ");
+    for (auto iter_target_weights = target_weights.begin(); iter_target_weights != target_weights.end(); iter_target_weights++)
+    {
+        ROS_INFO("       (id=%d, %lf)", iter_target_weights->first, iter_target_weights->second);
+    }
+    global_interface::StrikeLicensing strikeLicensing_msg;
+    strikeLicensing_msg.header.stamp = ros::Time::now();
+    strikeLicensing_msg.header.frame_id = "decision";
+    int ids = 0;
+    for (auto iter_target_weights = target_weights.begin(); iter_target_weights != target_weights.end(); iter_target_weights++)
+    {
+        strikeLicensing_msg.weights[ids] = iter_target_weights->second;
+        ++ids;
+    }
+    this->strikeLicensing_pub_.publish(strikeLicensing_msg);
+    if (!this->process_once(myHP, mode, myPos_x_, myPos_y_, nowTime, now_out_post_HP, now_base_HP, friendPositions, enemyPositions, transformStamped))
+    {
+        ROS_WARN("Decision failed!");
+    }
+    auto end_t = std::chrono::system_clock::now().time_since_epoch();
+    ROS_DEBUG("Take Time: %ld nsec FPS: %d", end_t.count() - start_t.count(), int(std::chrono::nanoseconds(1000000000).count() / (end_t - start_t).count()));
 }
 
 int main (int argc, char** argv) {

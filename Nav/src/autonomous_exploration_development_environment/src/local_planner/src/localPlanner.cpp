@@ -82,7 +82,7 @@ float joyDir = 0;
 const int pathNum = 343;
 const int groupNum = 7;
 float gridVoxelSize = 0.02;
-float searchRadius = 0.70;
+float searchRadius = 0.45;
 float gridVoxelOffsetX = 3.2;
 float gridVoxelOffsetY = 4.5;
 const int gridVoxelNumX = 161;
@@ -114,7 +114,7 @@ float clearPathPerGroupScore[36 * groupNum] = {0};
 std::vector<int> correspondences[gridVoxelNum];
 
 bool newLaserCloud = false;
-bool newTerrainCloud = true;
+bool newTerrainCloud = false;
 
 double odomTime = 0;
 double joyTime = 0;
@@ -149,9 +149,6 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloud2)
     pcl::PointXYZI point;
     laserCloudCrop->clear();
     int laserCloudSize = laserCloud->points.size();
-
-    //start
-
     for (int i = 0; i < laserCloudSize; i++) {
       point = laserCloud->points[i];
 
@@ -167,8 +164,6 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloud2)
         laserCloudCrop->push_back(point);
       }
     }
-
-    //end
 
     laserCloudDwz->clear();
     laserDwzFilter.setInputCloud(laserCloudCrop);
@@ -187,8 +182,6 @@ void terrainCloudHandler(const sensor_msgs::PointCloud2ConstPtr& terrainCloud2)
     pcl::PointXYZI point;
     terrainCloudCrop->clear();
     int terrainCloudSize = terrainCloud->points.size();
-    // start
-
     for (int i = 0; i < terrainCloudSize; i++) {
       point = terrainCloud->points[i];
 
@@ -205,8 +198,6 @@ void terrainCloudHandler(const sensor_msgs::PointCloud2ConstPtr& terrainCloud2)
       }
     }
 
-    // end
-
     terrainCloudDwz->clear();
     terrainDwzFilter.setInputCloud(terrainCloudCrop);
     terrainDwzFilter.filter(*terrainCloudDwz);
@@ -222,14 +213,14 @@ void joystickHandler(const sensor_msgs::Joy::ConstPtr& joy)
   joySpeedRaw = sqrt(joy->axes[3] * joy->axes[3] + joy->axes[4] * joy->axes[4]);
   joySpeed = joySpeedRaw;
   if (joySpeed > 1.0) joySpeed = 1.0;
-  if (joy->axes[4] == 0) joySpeed = 0;
+  //if (joy->axes[4] == 0) joySpeed = 0;
 
   if (joySpeed > 0) {
     joyDir = atan2(joy->axes[3], joy->axes[4]) * 180 / PI;
-    if (joy->axes[4] < 0) joyDir *= -1;
+    //if (joy->axes[4] < 0) joyDir *= -1;
   }
 
-  if (joy->axes[4] < 0 && !twoWayDrive) joySpeed = 0;
+  //if (joy->axes[4] < 0 && !twoWayDrive) joySpeed = 0;
 
   if (joy->axes[2] > -0.1) {
     autonomyMode = false;
@@ -617,8 +608,6 @@ int main(int argc, char** argv)
     ros::spinOnce();
 
     if (newLaserCloud || newTerrainCloud) {
-      // start
-
       if (newLaserCloud) {
         newLaserCloud = false;
 
@@ -639,7 +628,6 @@ int main(int argc, char** argv)
         *plannerCloud = *terrainCloudDwz;
       }
 
-      // end
       float sinVehicleRoll = sin(vehicleRoll);
       float cosVehicleRoll = cos(vehicleRoll);
       float sinVehiclePitch = sin(vehiclePitch);
@@ -650,8 +638,6 @@ int main(int argc, char** argv)
       pcl::PointXYZI point;
       plannerCloudCrop->clear();
       int plannerCloudSize = plannerCloud->points.size();
-      // start
-
       for (int i = 0; i < plannerCloudSize; i++) {
         float pointX1 = plannerCloud->points[i].x - vehicleX;
         float pointY1 = plannerCloud->points[i].y - vehicleY;
@@ -667,8 +653,6 @@ int main(int argc, char** argv)
           plannerCloudCrop->push_back(point);
         }
       }
-
-      // end
 
       int boundaryCloudSize = boundaryCloud->points.size();
       for (int i = 0; i < boundaryCloudSize; i++) {
@@ -705,17 +689,18 @@ int main(int argc, char** argv)
       if (pathRange < minPathRange) pathRange = minPathRange;
       float relativeGoalDis = adjacentRange;
 
+      float relativeGoalX = 0, relativeGoalY = 0;
       if (autonomyMode) {
-        float relativeGoalX = ((goalX - vehicleX) * cosVehicleYaw + (goalY - vehicleY) * sinVehicleYaw);
-        float relativeGoalY = (-(goalX - vehicleX) * sinVehicleYaw + (goalY - vehicleY) * cosVehicleYaw);
+        relativeGoalX = ((goalX - vehicleX) * cosVehicleYaw + (goalY - vehicleY) * sinVehicleYaw);
+        relativeGoalY = (-(goalX - vehicleX) * sinVehicleYaw + (goalY - vehicleY) * cosVehicleYaw);
 
         relativeGoalDis = sqrt(relativeGoalX * relativeGoalX + relativeGoalY * relativeGoalY);
         joyDir = atan2(relativeGoalY, relativeGoalX) * 180 / PI;
 
-        if (!twoWayDrive) {
+        /*if (!twoWayDrive) {
           if (joyDir > 90.0) joyDir = 90.0;
           else if (joyDir < -90.0) joyDir = -90.0;
-        }
+        }*/
       }
 
       bool pathFound = false;
@@ -818,10 +803,11 @@ int main(int argc, char** argv)
               dirDiff = 360.0 - dirDiff;
             }
 
-            float rotDirW;
-            if (rotDir < 18) rotDirW = fabs(fabs(rotDir - 9) + 1);
-            else rotDirW = fabs(fabs(rotDir - 27) + 1);
-            float score = (1 - sqrt(sqrt(dirWeight * dirDiff))) * rotDirW * rotDirW * rotDirW * rotDirW * penaltyScore;
+            //float rotDirW;
+            //if (rotDir < 18) rotDirW = fabs(fabs(rotDir - 9) + 1);
+            //else rotDirW = fabs(fabs(rotDir - 27) + 1);
+            float groupDirW = 4  - fabs(pathList[i % pathNum] - 3);
+            float score = (1 - sqrt(sqrt(dirWeight * dirDiff))) * groupDirW * groupDirW * penaltyScore;
             if (score > 0) {
               clearPathPerGroupScore[groupNum * rotDir + pathList[i % pathNum]] += score;
             }

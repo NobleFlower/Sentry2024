@@ -23,6 +23,8 @@ find_package(catkin REQUIRED COMPONENTS
   rosbag
   rospy
   tf
+  tf2
+  tf2_ros
   tf_conversions
   global_interface
   pcl_ros

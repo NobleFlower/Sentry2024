@@ -11,6 +11,8 @@
 #include <boost/thread/shared_mutex.hpp>
 #include <memory>
 #include <string>
+#include <tf2/utils.h>
+#include <tf2/exceptions.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <geometry_msgs/Pose.h>
@@ -33,7 +35,11 @@
 #include "global_interface/StrikeLicensing.h"
 
 #include "nav_msgs/Odometry.h"
+#include "ros/duration.h"
 #include "ros/node_handle.h"
+#include "ros/time.h"
+#include "ros/timer.h"
+#include "ros/wall_timer.h"
 
 using namespace std::chrono_literals;
 
@@ -130,8 +136,10 @@ private:
     boost::scoped_ptr<sync> TS_sync_;
 private:
     std::shared_ptr<RobotDecisionSys> myRDS;
-    std::shared_ptr<global_interface::Decision> excuting_decision = nullptr;
-    std::shared_ptr<geometry_msgs::TransformStamped> _transformStamped = nullptr;
+    std::shared_ptr<::global_interface::Decision> excuting_decision = nullptr;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_ = std::make_unique<tf2_ros::Buffer>();
+    std::shared_ptr<tf2_ros::TransformListener> transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    geometry_msgs::TransformStamped::Ptr _transformStamped = nullptr;
 
     std::vector<geometry_msgs::PointStamped> acummulated_poses_;
     std::chrono::milliseconds server_timeout_;
@@ -153,6 +161,7 @@ public:
      * @brief 初始化
      */
     RobotDecisionNode();
+    ~RobotDecisionNode();
     void clearGoals();
     /**
      * @brief 将消息位置转换成RobotPosition结构体
@@ -162,7 +171,7 @@ public:
      * RobotPosition集合
      */
     std::vector<RobotPosition> point2f2Position(
-        std::array<global_interface::Point2f, 12UL> pos);
+        boost::array<global_interface::Point2f, 12UL> pos);
     /**
      * @brief 消息回调，由message_filters处理
      */
