@@ -119,6 +119,8 @@ private:
     ros::Subscriber subPose;
     ros::Publisher pubWaypoint;
     ros::Publisher pubSpeed;
+    geometry_msgs::PointStamped waypointMsgs;
+    std_msgs::Float32 speedMsgs;
 
     ros::Timer  timer_;
 
@@ -141,7 +143,9 @@ private:
     std::shared_ptr<tf2_ros::TransformListener> transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
     geometry_msgs::TransformStamped::Ptr _transformStamped = nullptr;
 
-    std::vector<geometry_msgs::PointStamped> acummulated_poses_;
+    // std::vector<geometry_msgs::PointStamped> acummulated_poses_;
+    float vehicleX = 0, vehicleY = 0, vehicleZ = 0;
+    double curTime = 0, waypointTime = 0;
     std::chrono::milliseconds server_timeout_;
 
     std::shared_timed_mutex myMutex_status;
@@ -232,9 +236,10 @@ public:
      * @param theta 车辆朝向（弧度制）（偏角）
      * @return 决策消息
      */
-    global_interface::Decision makeDecisionMsg(
-        std::shared_ptr<global_interface::Decision> decision, double &theta);
-    
+    // global_interface::Decision makeDecisionMsg(
+    //     std::shared_ptr<Decision> decision, double &theta);
+    // global_interface::Decision makeDecisionMsg(
+    //     int mode, double theta, float _x, float _y);
 };
 
 

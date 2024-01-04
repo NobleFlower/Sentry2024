@@ -1,127 +1,16 @@
 #include "../include/robot_decision_node.hpp"
 #include <ros/package.h>
+#include <cstdio>
+#include <limits>
 #include <memory>
+#include <shared_mutex>
+#include "global_interface/Decision.h"
 #include "robot_decision/structs.h"
+#include "ros/init.h"
 #include "ros/time.h"
 
-void RobotDecisionNode::jointStateCallBack(const sensor_msgs::JointState::Ptr &msg) {
-    std::unique_lock<std::shared_timed_mutex> ulk(this->myMutex_joint_states);
-    if (msg->name[0] == "gimbal_yaw_joint" && !std::isnan(msg->position[0])) {
-        this->joint_states_msg = msg;
-    }
-    ulk.unlock();
-    ROS_DEBUG("jointState Recived: yaw = %lf , pitch = %lf", msg->position[0], msg->position[1]);
-}
-
-void RobotDecisionNode::clearGoals() {
-    this->acummulated_poses_.clear();
-}
-
 pcl::PointCloud<pcl::PointXYZ>::Ptr waypoints(new pcl::PointCloud<pcl::PointXYZ>());
-float vehicleX = 0, vehicleY = 0, vehicleZ = 0;
-double curTime = 0, waypointTime = 0;
-
-void RobotDecisionNode::makeNewGoal(double x, double y, double z) {
-    waypoints->clear();
-    pcl::PointXYZ point;
-    int val1, val2, val3;
-    point.x = x;
-    point.y = y;
-    point.z = z;
-    waypoints->push_back(point);
-}
-/*
-    * 不知道是啥
-*/
-void RobotDecisionNode::modeSetCallBack(const global_interface::ModeSet::Ptr msg) {
-    int mode = msg->mode;
-    float _x = msg->x;
-    float _y = msg->y;
-    float _z = msg->z;
-    ROS_INFO("Manual mode: %d x:%lf y:%lf z:%lf", mode, _x, _y, _z);
-    if (mode == 0) { return; }
-    bool check = true;
-    std::unique_lock<std::shared_timed_mutex> ulk(this->myMutex_modeSet);
-    if (this->modeSet_msg == nullptr) {
-        this->modeSet_msg = msg;
-        check = true;
-    } else if (this->modeSet_msg != nullptr && 
-                this->modeSet_msg->mode == mode && \
-                this->modeSet_msg->x == _x && 
-                this->modeSet_msg->y == _y && 
-                this->modeSet_msg->z == _z) {
-        check = false;
-    } else {
-        this->modeSet_msg = msg;
-        check = true;
-    }
-    global_interface::Decision newDecision_msg;
-    this->decision_pub_.publish(newDecision_msg);
-    if (check) {
-        this->clearGoals();
-        this->makeNewGoal(_x, _y, _z);
-        /*
-            * 没写完！！！！！！！！！！！！！！！！！！！！！！！！！
-        */
-    }
-}
-void RobotDecisionNode::poseHandler(const nav_msgs::Odometry::ConstPtr& pose) {
-    // 获取当前时间戳并将其转换为秒 数
-    curTime = pose->header.stamp.toSec();
-
-    vehicleX = pose->pose.pose.position.x;
-    vehicleY = pose->pose.pose.position.y;
-    vehicleZ = pose->pose.pose.position.z;
-}
-void RobotDecisionNode::respond(const ros::TimerEvent& event) {
-    nh.getParam("distance_thr", this->_distance_THR_Temp);
-    nh.getParam("seek_thr", this->_seek_THR_Temp);
-    nh.getParam("IsBlue", this->_IsBlue_Temp);
-
-    if (this->myRDS->getDistanceTHR() != this->_distance_THR_Temp)
-    {
-        ROS_INFO("set _distance_THR to %f", this->_distance_THR_Temp);
-        this->myRDS->setDistanceTHR(this->_distance_THR_Temp);
-    }
-    if (this->myRDS->getSeekTHR() != this->_seek_THR_Temp)
-    {
-        ROS_INFO("set _seek_THR to %f", this->_seek_THR_Temp);
-        this->myRDS->setSeekTHR(this->_seek_THR_Temp);
-    }
-    if (this->_IsBlue != this->_IsBlue_Temp)
-    {
-        ROS_INFO("set _IsBlue to %d", this->_IsBlue_Temp);
-        this->_IsBlue = this->_IsBlue_Temp;
-    }
-}
-bool RobotDecisionNode::decodeConfig() {
-    std::string package_share_directory = ros::package::getPath("robot_decision");
-    Json::Reader jsonReader;
-    Json::Value jsonValue;
-    std::ifstream jsonFile(package_share_directory + "/" + "JsonFile/config.json");
-    if (!jsonReader.parse(jsonFile, jsonValue, true)) {
-        std::cout << "read error" << std::endl;
-        jsonFile.close();
-        return false;
-    }
-    Json::Value arrayValue = jsonValue["config"];
-    this->_Debug = arrayValue["Debug"].asBool();
-    this->_WayPointsPath = package_share_directory + "/JsonFile/" + arrayValue["WayPointsPATH"].asCString();
-    this->_DecisionsPath = package_share_directory + "/JsonFile/" + arrayValue["DecisionsPath"].asCString();
-    this->_INIT_DISTANCE_THR = arrayValue["INIT_DISTANCE_THR"].asFloat();
-    this->_INIT_SEEK_THR = arrayValue["INIT_SEEK_THR"].asFloat();
-    this->_INIT_IsBlue = arrayValue["INIT_ISBLUE"].asBool();
-    this->_INIT_SELFINDEX = arrayValue["INIT_SELFINDEX"].asInt();
-    this->_INIT_FRIENDOUTPOSTINDEX = arrayValue["INIT_FRIENDOUTPOSTINDEX"].asInt();
-    this->_INIT_FRIENDBASEINDEX = arrayValue["INIT_FRIENDBASEINDEX"].asInt();
-    this->_GAME_TIME = arrayValue["GAME_TIME"].asInt();
-    this->_TIME_THR = arrayValue["TIME_THR"].asInt();
-    this->_REAL_WIDTH = arrayValue["REAL_WIDTH"].asFloat();
-    this->_REAL_HEIGHT = arrayValue["REAL_HEIGHT"].asFloat();
-    this->_STEP_DISTANCE = arrayValue["STEP_DISTANCE"].asFloat();
-    this->_CAR_SEEK_FOV = arrayValue["CAR_SEEK_FOV"].asFloat();
-    return true;
-}
+#define CV_PI   3.1415926535897932384626433832795
 
 RobotDecisionNode::RobotDecisionNode() {
     ROS_INFO("RobotDecision node...");
@@ -179,10 +68,41 @@ RobotDecisionNode::RobotDecisionNode() {
     waypointMsgs.header.frame_id = "map";
 
     this->pubSpeed = nh.advertise<std_msgs::Float32>("/speed", 5);
+    std_msgs::Float32 speedMsgs;
     // 检查条件是否为真。如果条件为假，程序将终止并输出错误信息
     assert(CARPOS_NUM == this->type_id.size() / 2);
 }
+
 RobotDecisionNode::~RobotDecisionNode() {};
+
+bool RobotDecisionNode::decodeConfig() {
+    std::string package_share_directory = ros::package::getPath("robot_decision");
+    Json::Reader jsonReader;
+    Json::Value jsonValue;
+    std::ifstream jsonFile(package_share_directory + "/" + "JsonFile/config.json");
+    if (!jsonReader.parse(jsonFile, jsonValue, true)) {
+        std::cout << "read error" << std::endl;
+        jsonFile.close();
+        return false;
+    }
+    Json::Value arrayValue = jsonValue["config"];
+    this->_Debug = arrayValue["Debug"].asBool();
+    this->_WayPointsPath = package_share_directory + "/JsonFile/" + arrayValue["WayPointsPATH"].asCString();
+    this->_DecisionsPath = package_share_directory + "/JsonFile/" + arrayValue["DecisionsPath"].asCString();
+    this->_INIT_DISTANCE_THR = arrayValue["INIT_DISTANCE_THR"].asFloat();
+    this->_INIT_SEEK_THR = arrayValue["INIT_SEEK_THR"].asFloat();
+    this->_INIT_IsBlue = arrayValue["INIT_ISBLUE"].asBool();
+    this->_INIT_SELFINDEX = arrayValue["INIT_SELFINDEX"].asInt();
+    this->_INIT_FRIENDOUTPOSTINDEX = arrayValue["INIT_FRIENDOUTPOSTINDEX"].asInt();
+    this->_INIT_FRIENDBASEINDEX = arrayValue["INIT_FRIENDBASEINDEX"].asInt();
+    this->_GAME_TIME = arrayValue["GAME_TIME"].asInt();
+    this->_TIME_THR = arrayValue["TIME_THR"].asInt();
+    this->_REAL_WIDTH = arrayValue["REAL_WIDTH"].asFloat();
+    this->_REAL_HEIGHT = arrayValue["REAL_HEIGHT"].asFloat();
+    this->_STEP_DISTANCE = arrayValue["STEP_DISTANCE"].asFloat();
+    this->_CAR_SEEK_FOV = arrayValue["CAR_SEEK_FOV"].asFloat();
+    return true;
+}
 
 bool RobotDecisionNode::process_once(int &HP, int &mode, float &_x, float &_y, int &time, int &now_out_post_HP, int &now_base_HP, std::vector<RobotPosition> &friendPositions, std::vector<RobotPosition> &enemyPositions, boost::shared_ptr<geometry_msgs::TransformStamped> transformStamped) {
     ROS_INFO("Heartbeat Processing");
@@ -200,6 +120,15 @@ bool RobotDecisionNode::process_once(int &HP, int &mode, float &_x, float &_y, i
     }
     /* 获取当前位姿 */
     return true;
+}
+
+void RobotDecisionNode::makeNewGoal(double x, double y, double z) {
+    pcl::PointXYZ point;
+    int val1, val2, val3;
+    point.x = x;
+    point.y = y;
+    point.z = z;
+    waypoints->push_back(point);
 }
 
 std::vector<RobotPosition> RobotDecisionNode::point2f2Position(boost::array<::global_interface::Point2f, 12UL> pos) {
@@ -279,7 +208,7 @@ void RobotDecisionNode::messageCallBack(const boost::shared_ptr<::global_interfa
     // 将所有位置填入vector
     std::vector<RobotPosition> allPositions = this->point2f2Position(carPos_msg_->pos);
     try {
-        // transformStamped = std::make_shared<geometry_msgs::TransformStamped>(this->tf_buffer_->lookupTransform("map_decision", "base_link", tf2::TimePointZero));
+        transformStamped = boost::make_shared<geometry_msgs::TransformStamped>(this->tf_buffer_->lookupTransform("map_decision", "base_link", ros::Time::now()));
         this->_transformStamped = transformStamped;
         std::shared_lock<std::shared_timed_mutex> slk(this->myMutex_detectionArray);
         if (this->detectionArray_msg != nullptr && ros::Time::now().toSec() - this->detectionArray_msg->header.stamp.sec <= this->_TIME_THR)
@@ -290,8 +219,8 @@ void RobotDecisionNode::messageCallBack(const boost::shared_ptr<::global_interfa
                 tf2::Vector3 p(it.center.position.x, it.center.position.y, it.center.position.z);
                 tf2::convert(transformStamped->transform, tf2_transform);
                 p = tf2_transform * p;
-                // allPositions[this->type_id.find(it.type)->second].x = p.getX();
-                // allPositions[this->type_id.find(it.type)->second].y = p.getY();
+                allPositions[this->type_id.find(it.type)->second].vehicleX = p.getX();
+                allPositions[this->type_id.find(it.type)->second].vehicleY = p.getY();
             }
         }
         slk.unlock();
@@ -351,7 +280,183 @@ void RobotDecisionNode::messageCallBack(const boost::shared_ptr<::global_interfa
     ROS_DEBUG("Take Time: %ld nsec FPS: %d", end_t.count() - start_t.count(), int(std::chrono::nanoseconds(1000000000).count() / (end_t - start_t).count()));
 }
 
+void RobotDecisionNode::jointStateCallBack(const sensor_msgs::JointState::Ptr &msg) {
+    std::unique_lock<std::shared_timed_mutex> ulk(this->myMutex_joint_states);
+    if (msg->name[0] == "gimbal_yaw_joint" && !std::isnan(msg->position[0])) {
+        this->joint_states_msg = msg;
+    }
+    ulk.unlock();
+    ROS_DEBUG("jointState Recived: yaw = %lf , pitch = %lf", msg->position[0], msg->position[1]);
+}
+
+/*
+    * 不知道是啥
+*/
+void RobotDecisionNode::modeSetCallBack(const global_interface::ModeSet::Ptr msg) {
+    int mode = msg->mode;
+    float _x = msg->x;
+    float _y = msg->y;
+    float _z = msg->z;
+    ROS_INFO("Manual mode: %d x:%lf y:%lf z:%lf", mode, _x, _y, _z);
+    if (mode == 0) { return; }
+    bool check = true;
+    std::unique_lock<std::shared_timed_mutex> ulk(this->myMutex_modeSet);
+    if (this->modeSet_msg == nullptr) {
+        this->modeSet_msg = msg;
+        check = true;
+    } else if (this->modeSet_msg != nullptr && 
+                this->modeSet_msg->mode == mode && \
+                this->modeSet_msg->x == _x && 
+                this->modeSet_msg->y == _y && 
+                this->modeSet_msg->z == _z) {
+        check = false;
+    } else {
+        this->modeSet_msg = msg;
+        check = true;
+    }
+    std::shared_lock<std::shared_timed_mutex> slk(this->myMutex_autoaim);
+    slk.unlock();
+    global_interface::Decision newDecision_msg;
+    this->decision_pub_.publish(newDecision_msg);
+    switch (mode) {
+    case 1:
+        ;
+    case 2:
+        if (check) {
+            this->clearGoals();
+            this->makeNewGoal(_x, _y, _z);
+            int wayPointID = 0;
+            auto waypointSize = waypoints->points.size();
+            ROS_INFO("Sending a path of %zu waypoints: ", waypointSize);
+            float disX = vehicleX - waypoints->points[wayPointID].x;
+            float disY = vehicleY - waypoints->points[wayPointID].y;
+            float disZ = vehicleZ - waypoints->points[wayPointID].z;
+
+            waypointMsgs.header.frame_id = "map";
+            // start waiting if the current waypoint is reached
+            if (sqrt(disX * disX + disY * disY) < waypointXYRadius &&
+                fabs(disZ) < waypointZBound && !isWaiting) {
+                waitTimeStart = curTime;
+                isWaiting = true;
+            }
+
+            // move to the next waypoint after waiting is over
+            if (isWaiting && waitTimeStart + waitTime < curTime &&
+                wayPointID < waypointSize - 1) {
+                wayPointID++;
+                isWaiting = false;
+            }
+
+            // publish waypoint, speed, and boundary messages at certain frame rate
+            if (curTime - waypointTime > 1.0 / frameRate) {
+                if (!isWaiting) {
+                    waypointMsgs.header.stamp = ros::Time().fromSec(curTime);
+                    waypointMsgs.point.x = waypoints->points[wayPointID].x;
+                    waypointMsgs.point.y = waypoints->points[wayPointID].y;
+                    waypointMsgs.point.z = waypoints->points[wayPointID].z;
+                    pubWaypoint.publish(waypointMsgs);
+                }
+
+                if (sendSpeed) {
+                    speedMsgs.data = speed;
+                    pubSpeed.publish(speedMsgs);
+                }
+
+                waypointTime = curTime;
+            }
+        }
+    case 3:
+        ;
+    }
+    
+}
+
+void RobotDecisionNode::respond(const ros::TimerEvent& event) {
+    nh.getParam("distance_thr", this->_distance_THR_Temp);
+    nh.getParam("seek_thr", this->_seek_THR_Temp);
+    nh.getParam("IsBlue", this->_IsBlue_Temp);
+
+    if (this->myRDS->getDistanceTHR() != this->_distance_THR_Temp)
+    {
+        ROS_INFO("set _distance_THR to %f", this->_distance_THR_Temp);
+        this->myRDS->setDistanceTHR(this->_distance_THR_Temp);
+    }
+    if (this->myRDS->getSeekTHR() != this->_seek_THR_Temp)
+    {
+        ROS_INFO("set _seek_THR to %f", this->_seek_THR_Temp);
+        this->myRDS->setSeekTHR(this->_seek_THR_Temp);
+    }
+    if (this->_IsBlue != this->_IsBlue_Temp)
+    {
+        ROS_INFO("set _IsBlue to %d", this->_IsBlue_Temp);
+        this->_IsBlue = this->_IsBlue_Temp;
+    }
+}
+
+// global_interface::Decision RobotDecisionNode::makeDecisionMsg(std::shared_ptr<Decision> decision, double &theta) {
+//     global_interface::Decision myDecision_msg;
+//     myDecision_msg.header.frame_id = "base_link";
+//     myDecision_msg.header.stamp = ros::Time::now();
+//     myDecision_msg.decision_id = (decision->id);
+//     std::shared_lock<std::shared_timed_mutex> slk(this->myMutex_autoaim);
+//     if (this->autoaim_msg != nullptr && abs((int)(ros::Time::now().sec - this->autoaim_msg->header.stamp.sec)) < this->_TIME_THR && decision->decide_mode != Mode::AUTOAIM && !this->autoaim_msg->is_target_lost)
+//     {
+//         myDecision_msg.mode = (Mode::AUTOAIM);
+//     }
+//     else
+//     {
+//         myDecision_msg.mode = (decision->decide_mode);
+//     }
+//     slk.unlock();
+//     std::shared_ptr<WayPoint> aimWayPoint = this->myRDS->getWayPointByID(decision->decide_wayPoint);
+//     myDecision_msg.x = (aimWayPoint->point.x);
+//     myDecision_msg.y = (aimWayPoint->point.y);
+//     myDecision_msg.theta = (theta);
+//     ROS_INFO("Publish Decision : [id] %d [mode] %d [x,y] %lf %lf",
+//         myDecision_msg.decision_id, myDecision_msg.mode, myDecision_msg.x, myDecision_msg.y);
+//     ROS_INFO("Publish Aim Yaw : %lf | angle: %lf",
+//         theta, theta * 180. / CV_PI);
+//     return myDecision_msg;
+// }
+
+// global_interface::Decision RobotDecisionNode::makeDecisionMsg(int mode, double theta, float _x, float _y) {
+//     global_interface::Decision myDecision_msg;
+//     myDecision_msg.header.frame_id = "base_link";
+//     myDecision_msg.header.stamp = ros::Time::now();
+//     myDecision_msg.decision_id = -1;
+//     myDecision_msg.mode = mode;
+//     myDecision_msg.x = _x;
+//     myDecision_msg.y = _y;
+//     myDecision_msg.theta = theta;
+//     ROS_INFO("Publish Decision : [id] %d [mode] %d [x,y] %lf %lf",
+//         myDecision_msg.decision_id, myDecision_msg.mode, myDecision_msg.x, myDecision_msg.y);
+//     ROS_INFO("Publish Aim Yaw : %lf | angle: %lf",
+//         theta, theta * 180. / CV_PI);
+//     return myDecision_msg;
+// }
+
+void RobotDecisionNode::clearGoals() {
+    waypoints->clear();
+}
+
+void RobotDecisionNode::poseHandler(const nav_msgs::Odometry::ConstPtr& pose) {
+    // 获取当前时间戳并将其转换为秒 数
+    curTime = pose->header.stamp.toSec();
+
+    vehicleX = pose->pose.pose.position.x;
+    vehicleY = pose->pose.pose.position.y;
+    vehicleZ = pose->pose.pose.position.z;
+}
+
+
+
+
+
 int main (int argc, char** argv) {
+    ros::init(argc, argv, "Json_Decision");
     RobotDecisionNode node;
+    // while (ros::ok()) {
+    //     ros::spinOnce();
+    // }
     return 0;
 }
