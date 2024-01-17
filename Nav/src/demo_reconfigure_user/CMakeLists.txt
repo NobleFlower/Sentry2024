@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  pcl_ros
 )
 
 ## System dependencies are found with CMake's conventions
@@ -142,6 +143,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/demo_reconfigure_user_node.cpp)
 add_executable(temp_solve_user src/temp_solve_user.cpp)
+add_executable(pretty_solve_user src/pretty_solve_user.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -153,12 +155,16 @@ add_executable(temp_solve_user src/temp_solve_user.cpp)
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(temp_solve_user ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(pretty_solve_user ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
 target_link_libraries(temp_solve_user
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(pretty_solve_user
   ${catkin_LIBRARIES}
 )
 

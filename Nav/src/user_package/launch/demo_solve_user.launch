@@ -4,8 +4,10 @@
     <include file="$(find fast_lio)/launch/mapping_mid360.launch" />
 
     <include file="$(find vehicle_simulator)/launch/system_real_robot.launch" />
+    <!-- <include file="$(find vehicle_simulator)/launch/system_indoor.launch" /> -->
 
-    <include file="$(find demo_reconfigure_user)/launch/temp_solve_user.launch" />
+    <!-- <include file="$(find demo_reconfigure_user)/launch/temp_solve_user.launch" /> -->
+    <include file="$(find demo_reconfigure_user)/launch/pretty_solve_user.launch" />
 
     <node pkg="user_package" type="control_chassis" name="control_chassis" output="screen" />
 
