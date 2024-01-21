@@ -129,6 +129,7 @@ PointCloudXYZI::Ptr featsFromMap(new PointCloudXYZI()); //提取地图中的特�
 PointCloudXYZI::Ptr feats_undistort(new PointCloudXYZI());  //去畸变的特征
 PointCloudXYZI::Ptr feats_down_body(new PointCloudXYZI());  //畸变纠正后降采样的单帧点云，lidar系
 PointCloudXYZI::Ptr feats_mmmmmmmmmmmmmmmmmmmmmm(new PointCloudXYZI());
+PointCloudXYZI::Ptr feats_nnnnnnnnnnnnnnnnnn(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_down_world(new PointCloudXYZI()); //畸变纠正后降采样的单帧点云，w系
 PointCloudXYZI::Ptr normvec(new PointCloudXYZI(100000, 1));  //特征点在地图中对应点的，局部平面参数,w系
 PointCloudXYZI::Ptr laserCloudOri(new PointCloudXYZI(100000, 1));   // laserCloudOri是畸变纠正后降采样的单帧点云，body系
@@ -141,8 +142,8 @@ pcl::VoxelGrid<PointType> downSizeFilterMap;    //未使用
 // 对整车滤波
 pcl::CropBox<PointType> cropFilter;
 pcl::ExtractIndices<PointType> extrFilter;
-Eigen::Vector4f min_pt = {-0.45, -0.275, -0.31};
-Eigen::Vector4f max_pt = { 0.10,  0.275,  0.23};
+Eigen::Vector4f min_pt = {-0.45, -0.275, -0.31, 0};
+Eigen::Vector4f max_pt = { 0.10,  0.275,  0.23, 0};
 
 KD_TREE<PointType> ikdtree; // ikd-tree类
 
@@ -348,7 +349,20 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
     PointCloudXYZI::Ptr  ptr(new PointCloudXYZI());
     p_pre->process(msg, ptr);   //点云预处理
-    lidar_buffer.push_back(ptr);    //将点云放入缓冲区
+    /*---------------Crop滤波-------------------------*/
+    cropFilter.setMin(min_pt);
+    cropFilter.setMax(max_pt);
+    cropFilter.setInputCloud(feats_down_body);
+    cropFilter.setKeepOrganized(false);   // 如果您希望能够提取被删除的点的索引，设置为true(默认= false)。
+    cropFilter.setUserFilterValue(0.1f);  // 提供一个被过滤的点应该设置为的值，而不是删除它们,与setKeepOrganized联用
+    pcl::IndicesPtr indexes(new pcl::Indices());
+    cropFilter.filter(*indexes);         // 获取位于框内点的索引
+    /*----------------取点----------------------------*/
+    extrFilter.setInputCloud(feats_down_body);
+    extrFilter.setIndices(indexes);
+    extrFilter.setNegative(true);
+    extrFilter.filter(*feats_nnnnnnnnnnnnnnnnnn);
+    lidar_buffer.push_back(feats_nnnnnnnnnnnnnnnnnn);    //将点云放入缓冲区
     time_buffer.push_back(msg->header.stamp.toSec());   //将时间放入缓冲区
     last_timestamp_lidar = msg->header.stamp.toSec();   //记录最后一个时间
     s_plot11[scan_count] = omp_get_wtime() - preprocess_start_time; //预处理时间
@@ -391,7 +405,20 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg)
     PointCloudXYZI::Ptr  ptr(new PointCloudXYZI());
     // 对激光雷达数据进行预处理（特征提取或者降采样），其中p_pre是Preprocess类的智能指针
     p_pre->process(msg, ptr);
-    lidar_buffer.push_back(ptr);
+    /*---------------Crop滤波-------------------------*/
+    cropFilter.setMin(min_pt);
+    cropFilter.setMax(max_pt);
+    cropFilter.setInputCloud(ptr);
+    cropFilter.setKeepOrganized(false);   // 如果您希望能够提取被删除的点的索引，设置为true(默认= false)。
+    cropFilter.setUserFilterValue(0.1f);  // 提供一个被过滤的点应该设置为的值，而不是删除它们,与setKeepOrganized联用
+    pcl::IndicesPtr indexes(new pcl::Indices());
+    cropFilter.filter(*indexes);         // 获取位于框内点的索引
+    /*----------------取点----------------------------*/
+    extrFilter.setInputCloud(ptr);
+    extrFilter.setIndices(indexes);
+    extrFilter.setNegative(true);
+    extrFilter.filter(*feats_mmmmmmmmmmmmmmmmmmmmmm);
+    lidar_buffer.push_back(feats_mmmmmmmmmmmmmmmmmmmmmm);
     time_buffer.push_back(last_timestamp_lidar);
     
     // 点云预处理的总时间
@@ -1093,21 +1120,8 @@ int main(int argc, char** argv)
             /*** downsample the feature points in a scan ***/
             downSizeFilterSurf.setInputCloud(feats_undistort);  //获得去畸变后的点云数据
             downSizeFilterSurf.filter(*feats_down_body);    //滤波降采样后的点云数据
-            /*---------------Crop滤波-------------------------*/
-            cropFilter.setMin(min_pt);
-            cropFilter.setMax(max_pt);
-            cropFilter.setInputCloud(feats_down_body);
-            cropFilter.setKeepOrganized(false);   // 如果您希望能够提取被删除的点的索引，设置为true(默认= false)。
-            cropFilter.setUserFilterValue(0.1f);  // 提供一个被过滤的点应该设置为的值，而不是删除它们,与setKeepOrganized联用
-            pcl::IndicesPtr indexes(new pcl::Indices());
-            cropFilter.filter(*indexes);         // 获取位于框内点的索引
-            /*----------------取点----------------------------*/
-            extrFilter.setInputCloud(feats_down_body);
-            extrFilter.setIndices(indexes);
-            extrFilter.setNegative(true);
-            extrFilter.filter(*feats_mmmmmmmmmmmmmmmmmmmmmm);
             t1 = omp_get_wtime();   //记录时间
-            feats_down_size = feats_mmmmmmmmmmmmmmmmmmmmmm->points.size();   //记录滤波后的点云数量
+            feats_down_size = feats_down_body->points.size();   //记录滤波后的点云数量
             /*** initialize the map kdtree ***/
             if(ikdtree.Root_Node == nullptr)
             {
@@ -1117,7 +1131,7 @@ int main(int argc, char** argv)
                     feats_down_world->resize(feats_down_size);
                     for(int i = 0; i < feats_down_size; i++)
                     {
-                        pointBodyToWorld(&(feats_mmmmmmmmmmmmmmmmmmmmmm->points[i]), &(feats_down_world->points[i]));
+                        pointBodyToWorld(&(feats_down_body->points[i]), &(feats_down_world->points[i]));
                     }
                     ikdtree.Build(feats_down_world->points);
                 }
