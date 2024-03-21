@@ -142,8 +142,10 @@ pcl::VoxelGrid<PointType> downSizeFilterMap;    //未使用
 // 对整车滤波
 pcl::CropBox<PointType> cropFilter;
 pcl::ExtractIndices<PointType> extrFilter;
-Eigen::Vector4f min_pt = {-0.45, -0.275, -0.31, 0};
-Eigen::Vector4f max_pt = { 0.10,  0.275,  0.23, 0};
+Eigen::Vector4f min_pt = {0, 0, 0, 0};
+Eigen::Vector4f max_pt = { 0,  0,  0, 0};
+// Eigen::Vector4f min_pt = {-0.45, -0.275, -0.31, 0};
+// Eigen::Vector4f max_pt = { 0.10,  0.275,  0.23, 0};
 
 KD_TREE<PointType> ikdtree; // ikd-tree类
 
@@ -259,8 +261,8 @@ void RGBpointBodyLidarToIMU(PointType const * const pi, PointType * const po)
     V3D p_body_imu(state_point.offset_R_L_I*p_body_lidar + state_point.offset_T_L_I);
 
     po->x = p_body_imu(0);
-    po->y = p_body_imu(1);
-    po->z = p_body_imu(2);
+    po->y = -p_body_imu(1);
+    po->z = -p_body_imu(2);
     po->intensity = pi->intensity;
 }
 
@@ -697,36 +699,20 @@ void set_posestamp(T & out)
 nav_msgs::Odometry user_last_odom;
 void user_set_odomstamp(nav_msgs::Odometry &odom)
 {
-    double dx = 0;
-    double dy = 0;
-    double dz = 0;
+    tf::Quaternion q, q_i;
+    q.setX(geoQuat.x);
+    q.setY(geoQuat.y);
+    q.setZ(geoQuat.z);
+    q.setW(geoQuat.w);
+    q_i = q.inverse();
+
     odom.pose.pose.position.x = state_point.pos(0);
-    odom.pose.pose.position.y = state_point.pos(1);
-    odom.pose.pose.position.z = state_point.pos(2);
+    odom.pose.pose.position.y = -state_point.pos(1);
+    odom.pose.pose.position.z = -state_point.pos(2);
     odom.pose.pose.orientation.x = geoQuat.x;
-    odom.pose.pose.orientation.y = geoQuat.y;
-    odom.pose.pose.orientation.z = geoQuat.z;
+    odom.pose.pose.orientation.y = q_i.y();
+    odom.pose.pose.orientation.z = q_i.z();
     odom.pose.pose.orientation.w = geoQuat.w;
-
-    odom.twist.twist.linear.x += (user_acc.x() / USER_G_ACC) * user_dt_imu;
-    odom.twist.twist.linear.y += (user_acc.y() / USER_G_ACC) * user_dt_imu;
-    odom.twist.twist.linear.z += (user_acc.z() - USER_G_ACC) * user_dt_imu;
-
-    // dx = odom.pose.pose.position.x - user_last_odom.pose.pose.position.x;
-    // dy = odom.pose.pose.position.y - user_last_odom.pose.pose.position.y;
-    // dx = odom.pose.pose.position.z - user_last_odom.pose.pose.position.z;
-
-    // user_last_odom.pose.pose.position.x = odom.pose.pose.position.x;
-    // user_last_odom.pose.pose.position.y = odom.pose.pose.position.y;
-    // user_last_odom.pose.pose.position.z = odom.pose.pose.position.z;
-    // user_last_odom.pose.pose.orientation.x = odom.pose.pose.orientation.x;
-    // user_last_odom.pose.pose.orientation.y = odom.pose.pose.orientation.y;
-    // user_last_odom.pose.pose.orientation.z = odom.pose.pose.orientation.z;
-    // user_last_odom.pose.pose.orientation.w = odom.pose.pose.orientation.w;
-
-    odom.twist.twist.angular.x = user_gyro.x();
-    odom.twist.twist.angular.y = user_gyro.y();
-    odom.twist.twist.angular.z = user_gyro.z();
 }
 /*********************User End***************************/
 
@@ -755,14 +741,24 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped)
     static tf::TransformBroadcaster br;
     tf::Transform                   transform;
     tf::Quaternion                  q;
+    tf::Quaternion                  q_temp, q_i;
     transform.setOrigin(tf::Vector3(odomAftMapped.pose.pose.position.x, \
-                                    odomAftMapped.pose.pose.position.y, \
-                                    odomAftMapped.pose.pose.position.z));
+                                    -odomAftMapped.pose.pose.position.y, \
+                                    -odomAftMapped.pose.pose.position.z));
+
+    q_temp.setW(odomAftMapped.pose.pose.orientation.w);
+    q_temp.setX(odomAftMapped.pose.pose.orientation.x);
+    q_temp.setY(odomAftMapped.pose.pose.orientation.y);
+    q_temp.setZ(odomAftMapped.pose.pose.orientation.z);
+    q_i = q_temp.inverse();
+
     q.setW(odomAftMapped.pose.pose.orientation.w);
     q.setX(odomAftMapped.pose.pose.orientation.x);
-    q.setY(odomAftMapped.pose.pose.orientation.y);
-    q.setZ(odomAftMapped.pose.pose.orientation.z);
+    q.setY(q_i.getY());
+    q.setZ(q_i.getZ());
+    
     transform.setRotation( q );
+    
     br.sendTransform( tf::StampedTransform( transform, odomAftMapped.header.stamp, "camera_init", "body" ) );
 }
 
