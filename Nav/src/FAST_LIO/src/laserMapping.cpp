@@ -142,10 +142,8 @@ pcl::VoxelGrid<PointType> downSizeFilterMap;    //未使用
 // 对整车滤波
 pcl::CropBox<PointType> cropFilter;
 pcl::ExtractIndices<PointType> extrFilter;
-Eigen::Vector4f min_pt = {0, 0, 0, 0};
-Eigen::Vector4f max_pt = { 0,  0,  0, 0};
-// Eigen::Vector4f min_pt = {-0.45, -0.275, -0.31, 0};
-// Eigen::Vector4f max_pt = { 0.10,  0.275,  0.23, 0};
+Eigen::Vector4f min_pt = {-0.29, -0.26, -0.59, 0};
+Eigen::Vector4f max_pt = { 0.32,  0.26,  0.11, 0};
 
 KD_TREE<PointType> ikdtree; // ikd-tree类
 
@@ -249,8 +247,8 @@ void RGBpointBodyToWorld(PointType const * const pi, PointType * const po)
     V3D p_global(state_point.rot * (state_point.offset_R_L_I*p_body + state_point.offset_T_L_I) + state_point.pos);
 
     po->x = p_global(0);
-    po->y = p_global(1);
-    po->z = p_global(2);
+    po->y = -p_global(1);
+    po->z = -p_global(2);
     po->intensity = pi->intensity;
 }
 
@@ -261,8 +259,8 @@ void RGBpointBodyLidarToIMU(PointType const * const pi, PointType * const po)
     V3D p_body_imu(state_point.offset_R_L_I*p_body_lidar + state_point.offset_T_L_I);
 
     po->x = p_body_imu(0);
-    po->y = -p_body_imu(1);
-    po->z = -p_body_imu(2);
+    po->y = p_body_imu(1);
+    po->z = p_body_imu(2);
     po->intensity = pi->intensity;
 }
 
@@ -699,19 +697,15 @@ void set_posestamp(T & out)
 nav_msgs::Odometry user_last_odom;
 void user_set_odomstamp(nav_msgs::Odometry &odom)
 {
-    tf::Quaternion q, q_i;
-    q.setX(geoQuat.x);
-    q.setY(geoQuat.y);
-    q.setZ(geoQuat.z);
-    q.setW(geoQuat.w);
-    q_i = q.inverse();
-
+    double dx = 0;
+    double dy = 0;
+    double dz = 0;
     odom.pose.pose.position.x = state_point.pos(0);
     odom.pose.pose.position.y = -state_point.pos(1);
     odom.pose.pose.position.z = -state_point.pos(2);
     odom.pose.pose.orientation.x = geoQuat.x;
-    odom.pose.pose.orientation.y = q_i.y();
-    odom.pose.pose.orientation.z = q_i.z();
+    odom.pose.pose.orientation.y = -geoQuat.y;
+    odom.pose.pose.orientation.z = -geoQuat.z;
     odom.pose.pose.orientation.w = geoQuat.w;
 }
 /*********************User End***************************/
@@ -741,24 +735,14 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped)
     static tf::TransformBroadcaster br;
     tf::Transform                   transform;
     tf::Quaternion                  q;
-    tf::Quaternion                  q_temp, q_i;
     transform.setOrigin(tf::Vector3(odomAftMapped.pose.pose.position.x, \
-                                    -odomAftMapped.pose.pose.position.y, \
-                                    -odomAftMapped.pose.pose.position.z));
-
-    q_temp.setW(odomAftMapped.pose.pose.orientation.w);
-    q_temp.setX(odomAftMapped.pose.pose.orientation.x);
-    q_temp.setY(odomAftMapped.pose.pose.orientation.y);
-    q_temp.setZ(odomAftMapped.pose.pose.orientation.z);
-    q_i = q_temp.inverse();
-
+                                    odomAftMapped.pose.pose.position.y, \
+                                    odomAftMapped.pose.pose.position.z));
     q.setW(odomAftMapped.pose.pose.orientation.w);
     q.setX(odomAftMapped.pose.pose.orientation.x);
-    q.setY(q_i.getY());
-    q.setZ(q_i.getZ());
-    
+    q.setY(odomAftMapped.pose.pose.orientation.y);
+    q.setZ(odomAftMapped.pose.pose.orientation.z);
     transform.setRotation( q );
-    
     br.sendTransform( tf::StampedTransform( transform, odomAftMapped.header.stamp, "camera_init", "body" ) );
 }
 
